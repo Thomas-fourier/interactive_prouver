@@ -106,9 +106,7 @@ let rec infer_type gamma = function
       | Or (x1, x2) -> (
           match (infer_type gamma t2, infer_type gamma t3) with
           | Imp (a1, a2), Imp (b1, b2) ->
-              if a1 = x1 && x2 = b1 && a2 = b2 then a2
-              else (
-                raise Type_error)
+              if a1 = x1 && x2 = b1 && a2 = b2 then a2 else raise Type_error
           | _ -> raise Type_error)
       | _ -> raise Type_error)
   | Absurd (_, ty) -> ty
@@ -127,63 +125,101 @@ and check_type gamma expr typ =
   if not (infer_type gamma expr = typ) then raise Type_error
 ;;
 
-
-if Array.length Sys.argv > 1 && Sys.argv.(1) = "basic_proofs" then
-  begin
-check_type [] (Abs ("x", TVar "A", Var "x")) (Imp (TVar "A", TVar "A"));
-try
-  check_type [] (Abs ("x", TVar "A", Var "x")) (Imp (TVar "B", TVar "B"));
-with Type_error -> (
-  ();
-  try
-    check_type [] (Var "x") (TVar "A");
-  with Type_error ->
+if Array.length Sys.argv > 1 && Sys.argv.(1) = "basic_proofs" then (
+  check_type [] (Abs ("x", TVar "A", Var "x")) (Imp (TVar "A", TVar "A"));
+  try check_type [] (Abs ("x", TVar "A", Var "x")) (Imp (TVar "B", TVar "B"))
+  with Type_error -> (
     ();
+    try check_type [] (Var "x") (TVar "A")
+    with Type_error ->
+      ();
 
-    let and_comm =
-      Abs ("x", And (TVar "A", TVar "B"), Pair (Snd (Var "x"), Fst (Var "x")))
-    in
-    print_endline "Preuve de la commutativité de /\\";
-    print_endline (string_of_tm and_comm);
-    print_endline (string_of_ty (infer_type [] and_comm));
+      let and_comm =
+        Abs ("x", And (TVar "A", TVar "B"), Pair (Snd (Var "x"), Fst (Var "x")))
+      in
+      print_endline "Preuve de la commutativité de /\\";
+      print_endline (string_of_tm and_comm);
+      print_endline (string_of_ty (infer_type [] and_comm));
 
-    let truth = Abs ("x", Imp (True, TVar "A"), App (Var "x", Unit)) in
-    print_endline "Preuve de (T => A) => A";
-    print_endline (string_of_tm truth);
-    print_endline (string_of_ty (infer_type [] truth));
+      let truth = Abs ("x", Imp (True, TVar "A"), App (Var "x", Unit)) in
+      print_endline "Preuve de (T => A) => A";
+      print_endline (string_of_tm truth);
+      print_endline (string_of_ty (infer_type [] truth));
 
-    let disjunction =
-      Abs
-        ( "x",
-          Or (TVar "A", TVar "B"),
-          Case
-            ( Var "x",
-              Abs ("x", TVar "A", Right (TVar "B", Var "x")),
-              Abs ("x", TVar "B", Left (Var "x", TVar "A")) ) )
-    in
-    print_endline "Preuve de la commutativité de \\/";
-    print_endline (string_of_tm disjunction);
-    print_endline (string_of_ty (infer_type [] disjunction));
+      let disjunction =
+        Abs
+          ( "x",
+            Or (TVar "A", TVar "B"),
+            Case
+              ( Var "x",
+                Abs ("x", TVar "A", Right (TVar "B", Var "x")),
+                Abs ("x", TVar "B", Left (Var "x", TVar "A")) ) )
+      in
+      print_endline "Preuve de la commutativité de \\/";
+      print_endline (string_of_tm disjunction);
+      print_endline (string_of_ty (infer_type [] disjunction));
 
-    let falsity =
-      Abs
-        ( "x",
-          And (TVar "A", Imp (TVar "A", Imp (TVar "B", False))),
-          App (Snd (Var "x"), Fst (Var "x")) )
-    in
-    print_endline "Preuve de Faux => B";
-    print_endline (string_of_tm falsity);
-    print_endline (string_of_ty (infer_type [] falsity)))
-  end
+      let falsity =
+        Abs
+          ( "x",
+            And (TVar "A", Imp (TVar "A", Imp (TVar "B", False))),
+            App (Snd (Var "x"), Fst (Var "x")) )
+      in
+      print_endline "Preuve de Faux => B";
+      print_endline (string_of_tm falsity);
+      print_endline (string_of_ty (infer_type [] falsity))))
 (* The lexer *)
 
 let () = Printexc.record_backtrace true
+
 exception Parse_error
-let must_kwd s k = match Stream.next s with Genlex.Kwd k' when k' = k -> () | _ -> raise Parse_error
-let peek_kwd s k = match Stream.peek s with Some (Genlex.Kwd k') when k' = k -> let _ = Stream.next s in true | _ -> false
-let stream_is_empty s = try Stream.empty s; true with Stream.Failure -> false
-let ident s = match Stream.next s with Genlex.Ident x -> x | _ -> raise Parse_error
-let lexer = Genlex.make_lexer ["("; ")"; "=>"; "/\\"; "\\/"; "fun"; "->"; ","; ":"; "fst"; "snd"; "T"; "left"; "right"; "not"; "case"; "of"; "|"; "absurd"; "_"]
+
+let must_kwd s k =
+  match Stream.next s with
+  | Genlex.Kwd k' when k' = k -> ()
+  | _ -> raise Parse_error
+
+let peek_kwd s k =
+  match Stream.peek s with
+  | Some (Genlex.Kwd k') when k' = k ->
+      let _ = Stream.next s in
+      true
+  | _ -> false
+
+let stream_is_empty s =
+  try
+    Stream.empty s;
+    true
+  with Stream.Failure -> false
+
+let ident s =
+  match Stream.next s with Genlex.Ident x -> x | _ -> raise Parse_error
+
+let lexer =
+  Genlex.make_lexer
+    [
+      "(";
+      ")";
+      "=>";
+      "/\\";
+      "\\/";
+      "fun";
+      "->";
+      ",";
+      ":";
+      "fst";
+      "snd";
+      "T";
+      "left";
+      "right";
+      "not";
+      "case";
+      "of";
+      "|";
+      "absurd";
+      "_";
+    ]
+
 let ty_of_tk s =
   let rec ty () = arr ()
   and arr () =
@@ -199,120 +235,116 @@ let ty_of_tk s =
     match Stream.next s with
     | Genlex.Ident x -> TVar x
     | Genlex.Kwd "(" ->
-       let a = ty () in
-       must_kwd s ")";
-       a
+        let a = ty () in
+        must_kwd s ")";
+        a
     | Genlex.Kwd "T" -> True
     | Genlex.Kwd "_" -> False
     | Genlex.Kwd "not" ->
-       let a = base () in
-       Imp (a, False)
+        let a = base () in
+        Imp (a, False)
     | _ -> raise Parse_error
   in
   ty ()
+
 let tm_of_tk s =
-  let noapp = List.map (fun k -> Some (Genlex.Kwd k)) [")"; ","; "case"; "fun"; "of"; "->"; "|"] in
+  let noapp =
+    List.map
+      (fun k -> Some (Genlex.Kwd k))
+      [ ")"; ","; "case"; "fun"; "of"; "->"; "|" ]
+  in
   let ty () = ty_of_tk s in
   let rec tm () = app ()
   and app () =
     let t = ref (abs ()) in
-    while not (stream_is_empty s) && not (List.mem (Stream.peek s) noapp) do
+    while (not (stream_is_empty s)) && not (List.mem (Stream.peek s) noapp) do
       t := App (!t, abs ())
     done;
     !t
   and abs () =
-    if peek_kwd s "fun" then
-      (
-        must_kwd s "(";
-        let x = ident s in
-        must_kwd s ":";
-        let a = ty () in
-        must_kwd s ")";
-        must_kwd s "->";
-        let t = tm () in
-        Abs (x, a, t)
-      )
-    else if peek_kwd s "case" then
-      (
-        let t = tm () in
-        must_kwd s "of";
-        let x = ident s in
-        must_kwd s "->";
-        let u = tm () in
-        must_kwd s "|";
-        let y = ident s in
-        must_kwd s "->";
-        let v = tm () in
-        match t with 
-        | Left (expr, typ) -> Case (t, Abs(x, (infer_type [] expr), u), Abs(y, typ, v))
-        | Right (typ, expr) -> Case (t, Abs(x, typ, u), Abs(y, (infer_type [] expr), v))
-        | _ -> raise Type_error 
-      )
-    else
-      base ()
+    if peek_kwd s "fun" then (
+      must_kwd s "(";
+      let x = ident s in
+      must_kwd s ":";
+      let a = ty () in
+      must_kwd s ")";
+      must_kwd s "->";
+      let t = tm () in
+      Abs (x, a, t))
+    else if peek_kwd s "case" then (
+      let t = tm () in
+      must_kwd s "of";
+      let x = ident s in
+      must_kwd s "->";
+      let u = tm () in
+      must_kwd s "|";
+      let y = ident s in
+      must_kwd s "->";
+      let v = tm () in
+      match t with
+      | Left (expr, typ) ->
+          Case (t, Abs (x, infer_type [] expr, u), Abs (y, typ, v))
+      | Right (typ, expr) ->
+          Case (t, Abs (x, typ, u), Abs (y, infer_type [] expr, v))
+      | _ -> raise Type_error)
+    else base ()
   and base () =
     match Stream.next s with
     | Genlex.Ident x -> Var x
     | Genlex.Kwd "(" ->
-       if peek_kwd s ")" then
-         Unit
-       else
-         let t = tm () in
-         if peek_kwd s "," then
-           let u = tm () in
-           must_kwd s ")";
-           Pair (t, u)
-         else
-           (
-             must_kwd s ")";
-             t
-           )
+        if peek_kwd s ")" then Unit
+        else
+          let t = tm () in
+          if peek_kwd s "," then (
+            let u = tm () in
+            must_kwd s ")";
+            Pair (t, u))
+          else (
+            must_kwd s ")";
+            t)
     | Genlex.Kwd "fst" ->
-       must_kwd s "(";
-       let t = tm () in
-       must_kwd s ")";
-       Fst t
+        must_kwd s "(";
+        let t = tm () in
+        must_kwd s ")";
+        Fst t
     | Genlex.Kwd "snd" ->
-       must_kwd s "(";
-       let t = tm () in
-       must_kwd s ")";
-       Snd t
+        must_kwd s "(";
+        let t = tm () in
+        must_kwd s ")";
+        Snd t
     | Genlex.Kwd "left" ->
-       must_kwd s "(";
-       let t = tm () in
-       must_kwd s ",";
-       let b = ty () in
-       must_kwd s ")";
-       Left (t, b)
+        must_kwd s "(";
+        let t = tm () in
+        must_kwd s ",";
+        let b = ty () in
+        must_kwd s ")";
+        Left (t, b)
     | Genlex.Kwd "right" ->
-       must_kwd s "(";
-       let a = ty () in
-       must_kwd s ",";
-       let t = tm () in
-       must_kwd s ")";
-       Right (a, t)
+        must_kwd s "(";
+        let a = ty () in
+        must_kwd s ",";
+        let t = tm () in
+        must_kwd s ")";
+        Right (a, t)
     | Genlex.Kwd "absurd" ->
-       must_kwd s "(";
-       let t = tm () in
-       must_kwd s ",";
-       let a = ty () in
-       must_kwd s ")";
-       Absurd (t, a)
+        must_kwd s "(";
+        let t = tm () in
+        must_kwd s ",";
+        let a = ty () in
+        must_kwd s ")";
+        Absurd (t, a)
     | Kwd "Nat" -> Zero
     | _ -> raise Parse_error
   in
   tm ()
+
 let ty_of_string a = ty_of_tk (lexer (Stream.of_string a))
 let tm_of_string t = tm_of_tk (lexer (Stream.of_string t))
-
-
 
 let rec string_of_ctx = function
   | [] -> ""
   | (a, b) :: [] -> a ^ " : " ^ string_of_ty b
   | (a, b) :: q -> a ^ " : " ^ string_of_ty b ^ " , " ^ string_of_ctx q
-
-type sequent = context * ty
 
 let proof = ref ""
 
@@ -325,7 +357,7 @@ let rm_last str =
 
 let string_of_seq = function a, b -> string_of_ctx a ^ " |- " ^ string_of_ty b
 
-let rec prove env a =
+let rec prove (env : context) a =
   print_endline (string_of_seq (env, a));
   print_string "? ";
   flush_all ();
