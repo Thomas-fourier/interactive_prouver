@@ -1,0 +1,5 @@
+A /\ B => B /\ A
+intro p
+intro
+snd p
+fst p

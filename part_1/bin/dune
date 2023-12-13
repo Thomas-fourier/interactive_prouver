@@ -1,0 +1,9 @@
+(executable
+ (public_name part_1)
+ (name part_1)
+ (libraries camlp-streams))
+
+(env
+ (dev
+  (flags
+   (:standard -w -34 -w -32 -w -37))))
