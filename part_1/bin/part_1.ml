@@ -218,6 +218,7 @@ let lexer =
       "|";
       "absurd";
       "_";
+      "Nat";
     ]
 
 let ty_of_tk s =
@@ -243,6 +244,7 @@ let ty_of_tk s =
     | Genlex.Kwd "not" ->
         let a = base () in
         Imp (a, False)
+    | Genlex.Kwd "Nat" -> Nat
     | _ -> raise Parse_error
   in
   ty ()
@@ -333,7 +335,6 @@ let tm_of_tk s =
         let a = ty () in
         must_kwd s ")";
         Absurd (t, a)
-    | Kwd "Nat" -> Zero
     | _ -> raise Parse_error
   in
   tm ()
