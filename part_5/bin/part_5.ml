@@ -184,9 +184,8 @@ let rec alpha = function
       function
       | Abs (xvar2, ty2, f2) when xvar1 = xvar2 -> alpha ty1 ty2 && alpha f1 f2
       | Abs (xvar2, ty2, f2) ->
-          let xvar = fresh_var () in
-          alpha (subst xvar1 (Var xvar) ty1) (subst xvar2 (Var xvar1) ty2)
-          && alpha (subst xvar1 (Var xvar) f1) (subst xvar2 (Var xvar1) f2)
+          alpha ty1 (subst xvar2 (Var xvar1) ty2)
+          && alpha f1 (subst xvar2 (Var xvar1) f2)
       | _ -> false)
   | Pi (xvar1, ty1, f1) -> (
       function
@@ -232,16 +231,15 @@ let rec infer (env : context) = function
   | Z -> Nat
   | S n when infer env n = Nat -> Nat
   | S _ -> raise Type_error
-  | Ind (p, z, s, n) ->
-      let type_i = infer env z and type_n = infer env n in
-      if conv env type_i (App (p, Z)) && conv env type_n Nat then
-        match normalize env (infer env s) with
+  | Ind (typ, init, hered, n) ->
+      let type_init = infer env init and type_n = infer env n in
+      if conv env type_init (App (typ, Z)) && conv env type_n Nat then
+        match normalize env (infer env hered) with
         | Pi (m, Nat, Pi (_, q, r)) ->
-            let new_env = (m, (Nat, None)) :: env in
             if
-              conv new_env (App (p, Var m)) q
-              && conv new_env (App (p, S (Var m))) r
-            then normalize env (App (p, n))
+              conv ((m, (Nat, None)) :: env) (App (typ, Var m)) q
+              && conv ((m, (Nat, None)) :: env) (App (typ, S (Var m))) r
+            then normalize env (App (typ, n))
             else raise Type_error
         | _ -> raise Type_error
       else raise Type_error
@@ -249,7 +247,7 @@ let rec infer (env : context) = function
   | Refl t ->
       let _ = infer env t in
       Type
-  | _ -> raise Type_error
+  | _ -> assert false
 
 let check env exp typ =
   if conv env (infer env exp) typ then () else raise Type_error
@@ -347,7 +345,8 @@ let of_tk s =
     | Genlex.Ident x -> (
         try
           if String.get x 0 = 'N' then
-            expr_of_int (int_of_string (String.sub x 1 (String.length x - 1)))
+            expr_of_int
+              (Int.abs (int_of_string (String.sub x 1 (String.length x - 1))))
           else Var x
         with Failure _ ->
           print_endline "failure";

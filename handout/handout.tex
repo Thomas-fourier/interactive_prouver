@@ -53,7 +53,18 @@
 
     Pour la substitution, j'ai utilisé l'idée du TD précédent, c'est-à-dire que je ne remplace pas le nom de la variable dans les abstractions et dans les $\Pi$ si la variable est déjà utilisée. Cela évite de remplacer tous les noms des variables. Cela permet de conserver les noms de variables définies à la main s'il n'y a pas de collision. 
 
-    J'ai défini commme dans la première partie 
+    La normalisation utilise une fonction auxiliaire: \verb|red_aux|. Cette fonction retourne une paire \verb|expr, bool| qui correspond à l'expression réduite et un booléen vrai si l'expression a été réduite. La normalisation consiste à réduire jusqu'à ce qu'aucune réduction ne soit possible. Pour une expression bien typée, la normalisation termine.
+
+    Les réductions difficiles sont l'application, l'abstraction et l'induction. Pour l'implication, je réduis chaque terme, et si je peux appliquer directement parce que le premier terme est une abstraction, je le fais. À cette étape, je ne vérifie pas les types. Si les expressions ont un type, l'application est licite. Pour l'abstraction, on doit indiquer dans l'environnement le type de la variable au moment de réduire le terme de droite. La réduction du \verb|Pi| s'effectue de la même manière. Pour l'induction, je commence par réduire au maximum chacun des termes. Lorsque chaque terme est réduit je peux commencer à appliquer l'induction, c'est-à-dire renvoyer l'initialisation si on applique l'induction à zéro et appliquer l'hérédité pour le successeur d'un entier. J'ai choisi de réduire les termes d'abord pour ne pas avoir à le faire plusieurs fois après avoir commencé à appliquer l'hérédité. 
+
+
+    La fonction \verb|alpha| vérifie que les constructeurs sont les mêmes et que chaque terme est $\alpha$-équivalent. Lorsque l'on introduit des variables (avec un \verb|Abs| ou un \verb|Pi|), je remplace l'un des noms de variable par l'autre et je continue récursivement.
+    
+    C'est au moment de l'inférence de type que l'on doit vérifier que toutes les constructions sont licites. Pour l'application, je vérifie que le terme de gauche est bien une fonction qui peut s'appliquer au terme de droite. 
+
+    Pour l'induction, on doit vérifier que le type est valable pour toutes les valeurs de $n$. Pour cela, on raisonne par induction: si $n$ vaut $0$, on utilise \verb|typ| pour connaître le type attendu et on vérifie que l'initialisation est bien de ce type (lignes 235--236). Pour la récurrence, on vérifie qu'en appliquant l'hérédité, on obtient bien le même type qu'en appliquant \verb|typ| au successeur du nombre.  
+
+    J'ai défini, comme dans la première partie une fonction qui tente de transformer une expression de type \verb|Nat| en un entier. Cela permet d'améliorer l'affichage. Par ailleurs, on peut entrer des entiers dans l'interface, par exemple, en entrant \verb|N2|, on obtient \verb|S (S Z)|.
 
 
 

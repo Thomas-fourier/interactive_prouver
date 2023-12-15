@@ -1,3 +1,0 @@
-define sum = fun (x: Nat) -> (Ind (fun (n : Nat) -> (Nat => Nat)) (fun (m : Nat) -> m) (fun (n: Nat) -> fun (f : Nat => Nat ) -> fun (p : Nat) -> S (f p)) x)
-eval sum (S (S (S Z))) (S (S Z))
-eval sum N4 N6
