@@ -71,13 +71,13 @@ let rec subst x t = function
   | Var v when v = x -> t
   | Var v -> Var v
   | App (a, b) -> App (subst x t a, subst x t b)
-  | Abs (y, ty, fy) when y = x || is_free_variable y fy ->
+  | Abs (y, ty, fy) when y = x || is_free_variable y t ->
       let v = fresh_var () in
-      Abs (v, subst x t (subst y (Var v) ty), subst v (Var y) fy)
+      Abs (v, subst x t (subst y (Var v) ty), subst x t (subst y (Var v) fy))
   | Abs (xvar, ty, f) -> Abs (xvar, subst x t ty, subst x t f)
-  | Pi (y, ty, fy) when y = x || is_free_variable y fy ->
+  | Pi (y, ty, fy) when y = x || is_free_variable y t ->
       let v = fresh_var () in
-      Pi (v, subst x t (subst y (Var v) ty), subst v (Var y) fy)
+      Pi (v, subst x t (subst y (Var v) ty), subst x t (subst y (Var v) fy))
   | Pi (xvar, ty, f) -> Pi (xvar, subst x t ty, subst x t f)
   | Nat -> Nat
   | Z -> Z
@@ -145,8 +145,11 @@ let rec red_aux (env : context) = function
       match n_red with
       | Z -> (init_red, true)
       | S n_red ->
-          ( App
-              (App (hered_red, n_red), Ind (typ_red, init_red, hered_red, n_red)),
+          ( fst
+              (red_aux env
+                 (App
+                    ( App (hered_red, n_red),
+                      Ind (typ_red, init_red, hered_red, n_red) ))),
             true )
       | _ ->
           ( Ind (typ_red, init_red, hered_red, n_red),
@@ -256,6 +259,8 @@ let () = Printexc.record_backtrace true
 
 exception Parse_error
 
+let rec expr_of_int = function 0 -> Z | n -> S (expr_of_int (n - 1))
+
 let lexer =
   Genlex.make_lexer
     [
@@ -339,7 +344,15 @@ let of_tk s =
     else t
   and base () =
     match Stream.next s with
-    | Genlex.Ident x -> Var x
+    | Genlex.Ident x -> (
+        try
+          if String.get x 0 = 'N' then
+            expr_of_int (int_of_string (String.sub x 1 (String.length x - 1)))
+          else Var x
+        with Failure _ ->
+          print_endline "failure";
+          print_endline x;
+          Var x)
     | Genlex.Kwd "Type" -> Type
     | Genlex.Kwd "Nat" -> Nat
     | Genlex.Kwd "Z" -> Z
