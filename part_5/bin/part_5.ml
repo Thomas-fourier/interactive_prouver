@@ -45,9 +45,11 @@ let rec to_string = function
   | Ind (typ, zero, hered, n) ->
       "Ind (" ^ to_string typ ^ "," ^ to_string zero ^ "," ^ to_string hered
       ^ "," ^ to_string n ^ ")"
-  | Eq (a, b) -> to_string a ^ " == " ^ to_string b
-  | Refl a -> "Refl (" ^ to_string a ^ ")"
-  | J (_, _, _, _, _) -> assert false
+  | Eq (a, b) -> "Eq (" ^ to_string a ^ ", " ^ to_string b ^ ")"
+  | Refl t -> "Refl (" ^ to_string t ^ ")"
+  | J (p, r, x, y, e) ->
+      "Eq (" ^ to_string p ^ ", " ^ to_string r ^ ", " ^ to_string x ^ ", "
+      ^ to_string y ^ ", " ^ to_string e ^ ")"
 
 let rec is_free_variable x = function
   | Type | Nat | Z -> true
@@ -58,9 +60,11 @@ let rec is_free_variable x = function
   | Ind (typ, zero, hered, n) ->
       is_free_variable x typ || is_free_variable x zero
       || is_free_variable x hered || is_free_variable x n
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
-  | J (_, _, _, _, _) -> assert false
+  | Eq (t, x1) -> is_free_variable x t || is_free_variable x x1
+  | Refl t -> is_free_variable x t
+  | J (p, r, x1, y, e) ->
+      is_free_variable x p || is_free_variable x r || is_free_variable x x1
+      || is_free_variable x y || is_free_variable x e
 
 let rec subst x t = function
   | Type -> Type
@@ -80,9 +84,10 @@ let rec subst x t = function
   | S n -> S (subst x t n)
   | Ind (typ, zero, hered, n) ->
       Ind (subst x t typ, subst x t zero, subst x t hered, subst x t n)
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
-  | J (_, _, _, _, _) -> assert false
+  | Eq (t1, x1) -> Eq (subst x t t1, subst x t x1)
+  | Refl t1 -> Refl (subst x t t1)
+  | J (p, r, x1, y, e) ->
+      J (subst x t p, subst x t r, subst x t x1, subst x t y, subst x t e)
 
 let rec string_of_context = function
   | [] -> ""
@@ -146,9 +151,21 @@ let rec red_aux (env : context) = function
       | _ ->
           ( Ind (typ_red, init_red, hered_red, n_red),
             typ_bool || init_bool || hered_bool || n_bool ))
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
-  | J (_, _, _, _, _) -> assert false
+  | Eq (t, u) ->
+      let t_red, t_bool = red_aux env t and u_red, u_bool = red_aux env u in
+      (Eq (t_red, u_red), t_bool || u_bool)
+  | Refl t ->
+      let t_red, t_bool = red_aux env t in
+      (Refl t_red, t_bool)
+  | J (_, r, x, y, Refl e) when x = y && y = e -> (App (r, x), true)
+  | J (p, r, x, y, e) ->
+      let p_red, p_bool = red_aux env p
+      and r_red, r_bool = red_aux env r
+      and x_red, x_bool = red_aux env x
+      and y_red, y_bool = red_aux env y
+      and e_red, e_bool = red_aux env e in
+      ( J (p_red, r_red, x_red, y_red, e_red),
+        p_bool || r_bool || x_bool || y_bool || e_bool )
 
 let rec normalize env t =
   match red_aux env t with
@@ -185,9 +202,15 @@ let rec alpha = function
              && alpha n1 n2 ->
           true
       | _ -> false)
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
-  | J (_, _, _, _, _) -> assert false
+  | Eq (t1, x1) -> (
+      function Eq (t2, x2) -> alpha t1 t2 && alpha x1 x2 | _ -> false)
+  | Refl t1 -> ( function Refl t2 -> alpha t1 t2 | _ -> false)
+  | J (p1, r1, x1, y1, e1) -> (
+      function
+      | J (p2, r2, x2, y2, e2) ->
+          alpha p1 p2 && alpha r1 r2 && alpha x1 x2 && alpha y1 y2
+          && alpha e1 e2
+      | _ -> false)
 
 let conv (env : context) a b = alpha (normalize env a) (normalize env b)
 
@@ -219,9 +242,11 @@ let rec infer (env : context) = function
             else raise Type_error
         | _ -> raise Type_error
       else raise Type_error
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
-  | J (_, _, _, _, _) -> assert false
+  | Eq (t, u) when conv env (infer env t) (infer env u) -> Type
+  | Refl t ->
+      let _ = infer env t in
+      Type
+  | _ -> raise Type_error
 
 let check env exp typ =
   if conv env (infer env exp) typ then () else raise Type_error
