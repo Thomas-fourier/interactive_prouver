@@ -1,0 +1,64 @@
+\documentclass[a4paper]{article}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+
+\author{Thomas \textsc{Fourier}}
+\title{Implementing a propositional prover}
+\begin{document}
+    \maketitle
+    \section{Inférence de types pour du calcul simplement typé}
+
+    Les types sont définis de manière assez naturelle, avec des notations préfixes. Les notations infixes pour l'implication, le $/\backslash$ et $\backslash/$ auraient été plus naturelles, mais OCaml ne semble pas supporter cela dans la définition des types. 
+
+    Pour ce qui est des types, la plupart sont intuitifs. J'ai introduit les deux projections \verb|Fst| \verb|Snd| pour la conjonction. Pour faciliter la disjonction, j'ai ajouté le type de l'autre membre. Ce n'est pas nécessaire, on aurait pu inférer le type du membre dont on n'a pas l'expression en analysant l'ensemble de la formule pour déduire quels types doivent être égaux. Par exemple, dans:
+    \begin{verbatim}
+( "x",
+    Or (TVar "A", TVar "B"),
+    Case
+        ( Var "x",
+        Abs ("a", TVar "A", Right (Var "a")),
+        Abs ("b", TVar "B", Left (Var "b")) ) )
+    \end{verbatim}
+    on sait que les deux expressions \verb|Right (Var "a")| et \verb|Left (Var "b")| ont le même type. On peut donc en déduire que le type est \verb|Or (TVar "A", TVar "B")|. Si on ne peut pas déduire le type d'un des deux membres, c'est qu'il n'a pas été utilisé, on peut donc lui donner un nom unique arbitraire. Je n'ai pas implémenté cette fonctionnalité parce que cela aurait demandé beaucoup de modifications et avoir une structure de type particulier. 
+
+    Le \verb|Case| attend des arguments de types particuliers. Le premier est un \verb|Or(A, B)|, le deuxième \verb|Imp(A,C)|, \verb|Imp(B,C)|.\ \verb|Case(x, f, g)| représente, si \verb|x = Left(y, _)| \verb|f(x)| et si \verb|x = Left(_, y)| \verb|f(y)|. Cette approche est différente du cours où on avait un constructeur \verb|Case| qui prend cinq arguments. Les deux sont équivalents. J'ai choisi ma solution parce qu'elle permet d'utiliser le constructeur \verb|App| et de ne pas avoir à le recoder.
+
+    Le constructeur \verb|Rec| prend trois arguments: le premier représente un entier, le second le cas de base (c'est-à-dire la valeur si l'entier est nul, de type \verb|A|) et une fonction de type \verb|Imp(Nat, Imp(A, A))|. La sémantique est:
+    \begin{verbatim}
+        Imp(Z, init, _) = init
+        Imp(S n, init, hered) = hered n (Imp(n, init, hered))
+    \end{verbatim}
+    La fonction \verb|string_of_tm| n'est pas très claire pour ce constructeur, mais je n'ai pas trouvé une manière plus pertinente de l'afficher. Par exemple, la somme s'écrit:
+    \begin{verbatim}
+(fun n:Nat) -> Match n with 
+  |0 -> (fun m:Nat) -> m
+  |succ n ->  with n+ = fct evaluated at pred -> (fun m:Nat) -> Suc of (n+ m)
+    \end{verbatim}
+
+    Pour faciliter la lecture de certaines fonctions, j'ai créé une fonction \verb|nat_to_int| qui permet d'afficher les entiers de manière naturelle. Cela servira plus dans la partie 5.
+
+    Pour l'inférence de types, on vérifie pour \verb|App|, \verb|Case| et \verb|Rec| que les types sont bien valides comme définit plus haut. 
+
+    Pour le démonstrateur interactif, l'introduction permet de traiter l'implication et la conjonction séparément. On traite les deux cas de manière naturelle: pour \verb|A => B|, on suppose \verb|A| et on prouve \verb|B|, ce qui revient à se donner une variable de type \verb|A| et calculer un résultat de type \verb|B|. Pour la conjonction, on montre d'abord le terme de droite puis celui de gauche. J'ai noté que l'expression \verb-let … and … in- n'est pas exécuté dans l'ordre. 
+
+    La commande \verb|exact| est plus simple, il suffit de vérifier que la variable a le type à démontrer. 
+
+    Les méthodes \verb|elim| sont plus diverses. Il y a plusieurs méthodes pour l'élimination du \verb|Nat|. Le mot clé \verb|elim| permet de faire une récurrence. Avec les notations utilisées pour introduire la récurrence, on doit d'abord montrer \verb|A|, ce qui correspond à la valeur en \verb|0|. On doit ensuite définir l'hérédité. Pour cela, on utilise l'entier sur lequel on fait l'élimination comme premier paramètre et on doit prouver \verb|A => A|. 
+
+    Les deux autres méthodes d'élimination des entiers: zéro et successeur sont des mots clés dédiés. Successeur ne change rien au contexte, ni à la formule à prouver si elle est licite (c'est-à-dire égale à \verb|Nat|). Le zéro prouve \verb|Nat|.
+
+
+    \section{Dependant types}
+
+    Pour la substitution, j'ai utilisé l'idée du TD précédent, c'est-à-dire que je ne remplace pas le nom de la variable dans les abstractions et dans les $\Pi$ si la variable est déjà utilisée. Cela évite de remplacer tous les noms des variables. Cela permet de conserver les noms de variables définies à la main s'il n'y a pas de collision. 
+
+    J'ai défini commme dans la première partie 
+
+
+
+
+
+
+
+\end{document}
