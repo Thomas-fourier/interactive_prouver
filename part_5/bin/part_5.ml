@@ -45,8 +45,8 @@ let rec to_string = function
   | Ind (typ, zero, hered, n) ->
       "Ind (" ^ to_string typ ^ "," ^ to_string zero ^ "," ^ to_string hered
       ^ "," ^ to_string n ^ ")"
-  | Eq (_, _) -> assert false
-  | Refl _ -> assert false
+  | Eq (a, b) -> to_string a ^ " == " ^ to_string b
+  | Refl a -> "Refl (" ^ to_string a ^ ")"
   | J (_, _, _, _, _) -> assert false
 
 let rec is_free_variable x = function
@@ -62,42 +62,24 @@ let rec is_free_variable x = function
   | Refl _ -> assert false
   | J (_, _, _, _, _) -> assert false
 
-(*let rec subst x t = function
+let rec subst x t = function
   | Type -> Type
   | Var v when v = x -> t
   | Var v -> Var v
   | App (a, b) -> App (subst x t a, subst x t b)
-  | Abs (xvar, ty, f) when xvar = x || is_free_variable x f ->
+  | Abs (y, ty, fy) when y = x || is_free_variable y fy ->
       let v = fresh_var () in
-      (* Abs (v, subst v (Var xvar) ty, subst v (Var xvar) f) *)
-      Abs
-        (v, subst x t (subst xvar (Var v) ty), subst x t (subst xvar (Var v) t))
+      Abs (v, subst x t (subst y (Var v) ty), subst v (Var y) fy)
   | Abs (xvar, ty, f) -> Abs (xvar, subst x t ty, subst x t f)
-  | Pi (xvar, ty, f) when xvar = x || is_free_variable x f ->
+  | Pi (y, ty, fy) when y = x || is_free_variable y fy ->
       let v = fresh_var () in
-      Abs
-        (v, subst x t (subst xvar (Var v) ty), subst x t (subst xvar (Var v) t))
+      Pi (v, subst x t (subst y (Var v) ty), subst v (Var y) fy)
   | Pi (xvar, ty, f) -> Pi (xvar, subst x t ty, subst x t f)
-  | _ -> assert false
-*)
-let rec subst x u = function
-  | Type -> Type
-  | Var y when y = x -> u
-  | Var y -> Var y
-  | App (t, t') -> App (subst x u t, subst x u t')
-  | Abs (y, a, t) when y = x || is_free_variable y u ->
-      let z = fresh_var () in
-      Abs (z, subst x u (subst y (Var z) a), subst x u (subst y (Var z) t))
-  | Abs (y, a, t) -> Abs (y, subst x u a, subst x u t)
-  | Pi (y, a, b) when y = x || is_free_variable y u ->
-      let z = fresh_var () in
-      Pi (z, subst x u (subst y (Var z) a), subst x u (subst y (Var z) b))
-  | Pi (y, a, b) -> Pi (y, subst x u a, subst x u b)
   | Nat -> Nat
   | Z -> Z
-  | S n -> S (subst x u n)
+  | S n -> S (subst x t n)
   | Ind (typ, zero, hered, n) ->
-      Ind (subst x u typ, subst x u zero, subst x u hered, subst x u n)
+      Ind (subst x t typ, subst x t zero, subst x t hered, subst x t n)
   | Eq (_, _) -> assert false
   | Refl _ -> assert false
   | J (_, _, _, _, _) -> assert false
@@ -138,8 +120,9 @@ let rec red_aux (env : context) = function
       and y_reduced, y_bool = red_aux env y in
       (App (x_reduced, y_reduced), x_bool || y_bool)
   | Abs (x, y, z) ->
-      let a, b = red_aux ((x, (y, None)) :: env) z in
-      (Abs (x, a, z), b)
+      let y_red, y_bool = red_aux env y
+      and z_red, z_bool = red_aux ((x, (y, None)) :: env) z in
+      (Abs (x, y_red, z_red), y_bool || z_bool)
   | Pi (x, y, z) ->
       let y_op, y_ch = red_aux env y
       and z_op, z_ch = red_aux ((x, (y, None)) :: env) z in
@@ -169,8 +152,8 @@ let rec red_aux (env : context) = function
 
 let rec normalize env t =
   match red_aux env t with
-  | reduced, true -> normalize env reduced
-  | reduced, false -> reduced
+  | expr, true -> normalize env expr
+  | expr, false -> expr
 
 let rec alpha = function
   | Type -> ( function Type -> true | _ -> false)
@@ -206,59 +189,39 @@ let rec alpha = function
   | Refl _ -> assert false
   | J (_, _, _, _, _) -> assert false
 
-let conv (env : context) a b =
-  (* print_endline "normalized";
-     print_endline (to_string (normalize context a));
-     print_endline (to_string (normalize context b));
-     print_endline "end of normalized"; *)
-  alpha (normalize env a) (normalize env b)
+let conv (env : context) a b = alpha (normalize env a) (normalize env b)
 
-let rec infer_aux (env : context) = function
+let rec infer (env : context) = function
   | Type | Pi (_, _, _) | Nat -> Type
   | Var v -> get_type_from_context v env
   | App (f, x) -> (
       match infer env f with
       | Pi (y, a, b) ->
           let type_x = infer env x in
-          if conv ((y, (type_x, Some x)) :: env) a type_x then
-            normalize ((y, (type_x, Some x)) :: env) b
-          else raise Type_error
+          if conv env a type_x then subst y x b else raise Type_error
       | _ -> raise Type_error)
   | Abs (x, type_x, fx) ->
-      print_endline (to_string type_x);
       let type_f = infer ((x, (type_x, None)) :: env) fx in
       Pi (x, type_x, type_f)
   | Z -> Nat
   | S n when infer env n = Nat -> Nat
   | S _ -> raise Type_error
-  | Ind (typ, init, hered, n)
-    when conv env (infer env init) (App (typ, Z)) && conv env Nat (infer env n)
-    ->
-      let next_type = App (typ, S n) in
-      (* print_endline "infer ind";
-         print_endline (to_string next_type);
-         print_endline
-           (to_string
-              (infer env (normalize env (App (App (hered, n), App (typ, n))))));
-         print_endline "end infer ind"; *)
-      if
-        conv env next_type
-          (normalize env (infer env (App (App (hered, n), App (typ, n)))))
-      then normalize env (App (typ, n))
+  | Ind (p, z, s, n) ->
+      let type_i = infer env z and type_n = infer env n in
+      if conv env type_i (App (p, Z)) && conv env type_n Nat then
+        match normalize env (infer env s) with
+        | Pi (m, Nat, Pi (_, q, r)) ->
+            let new_env = (m, (Nat, None)) :: env in
+            if
+              conv new_env (App (p, Var m)) q
+              && conv new_env (App (p, S (Var m))) r
+            then normalize env (App (p, n))
+            else raise Type_error
+        | _ -> raise Type_error
       else raise Type_error
-  | Ind (typ, init, hered, n) ->
-      print_endline (to_string (normalize env init));
-      print_endline (to_string (normalize env (App (typ, Z))));
-      print_endline (to_string n);
-      print_endline (string_of_context env);
-      print_endline "type of n";
-      print_endline (to_string (normalize env (infer env n)));
-      raise Type_error
   | Eq (_, _) -> assert false
   | Refl _ -> assert false
   | J (_, _, _, _, _) -> assert false
-
-and infer env expr = infer_aux env expr
 
 let check env exp typ =
   if conv env (infer env exp) typ then () else raise Type_error
